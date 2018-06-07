@@ -34,8 +34,8 @@ typedef enum
 
 typedef struct
 {
-	unsigned int length;
 	char data[SIZE];
+	unsigned int length;	
 } Message;
 
 typedef struct sockaddr_in SocketAddress;
@@ -46,7 +46,7 @@ void makeDestSA(struct sockaddr_in * sa, char *hostname, int port) ;
 void makeLocalSA(struct sockaddr_in *sa) ;
 void server(int port) ;
 void makeReceiverSA(SocketAddress *sa, int port);
-void printSA(struct sockaddr_in sa);
+
 void changeclientSA(SocketAddress *newclientSA);
 Status GetRequest(Message *callMessage, int s, SocketAddress *clientSA);
 Status SendReply(Message *replyMessage, int s, SocketAddress clientSA);
@@ -93,12 +93,12 @@ int main()
 		//GetRequest picks message from socket and if status is Ok, print received message
 		if(GetRequest(&message, s, &clientSocketAddress)==Ok)
 		{
-     			log_trace("Received Message: %s\n", message.data);
+     			log_info("Received Message: %d - %s\n", message.length, message.data);
 		}
 		//Echo the received message to client
-		strncpy(replyMessage.data, message.data, strlen(message.data));
-		replyMessage.length=strlen(replyMessage.data);
-		Status tempStatus= SendReply(&replyMessage, s, clientSocketAddress);
+		strncpy(replyMessage.data, message.data, message.length);
+		replyMessage.length = message.length;
+		Status tempStatus = SendReply(&replyMessage, s, clientSocketAddress);
 		if(tempStatus==Bad)
 		{
 			log_warn("Something has gone wrong when replying to client\n");
@@ -139,9 +139,10 @@ Status UDPreceive(int s, Message *m, SocketAddress *origin)
 	Status status;
 	int addrlen=sizeof(SocketAddress);
 	int n=0;
-	if((n = recvfrom(s, m,  sizeof(Message), 0, (struct sockaddr *)origin, (socklen_t*)&addrlen))> 0)
+	if((n = recvfrom(s, m->data,  SIZE-1, 0, (struct sockaddr *)origin, (socklen_t*)&addrlen))> 0)
 	{
-		//printf("UDP Receive: Message data is %s\n",m->data);
+		m->length = n;
+		//log_info("UDP Receive: Message data is %d - %s\n", m->length, m->data);
 		status=Ok;
 	}
 	else
@@ -166,10 +167,13 @@ Status SendReply(Message *replyMessage, int s, SocketAddress clientSA)
 Status UDPsend(int s, Message *m, SocketAddress destination)
 {
 	Status status;int n;
-	if( (n = sendto(s, m, sizeof(Message), 0, (struct sockaddr *)&destination, sizeof(destination))) > 0)
+	if( (n = sendto(s, m->data, m->length, 0, (struct sockaddr *)&destination, sizeof(destination))) > 0)
 	{
 		status=Ok;
-		log_trace("Echoing message: %s\n", m->data);
+		if(n==m->length)			
+			log_info("Echoing message: %d - %s\n", m->length ,m->data);
+		else
+			log_warn("Echoing message: %d/%d - %s\n", n, m->length,m->data);
 	}
 	else
 	{
@@ -196,3 +200,4 @@ void printSA(SocketAddress sa)
 	inet_ntop(AF_INET, &sa.sin_addr, mybuf, 80);
 	log_trace("sa = %d, %s, %d\n", sa.sin_family, mybuf, ntohs(sa.sin_port));
 }
+
